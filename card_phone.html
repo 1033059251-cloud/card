@@ -25,6 +25,9 @@
     touch-action:none;
   }
 
+  /* 银河层（2D canvas：极淡银河带） */
+  #nebula{ position:fixed; inset:0; z-index:0; pointer-events:none; }
+
   /* 星空层（2D canvas：闪烁星星 + 流星） */
   #stars{ position:fixed; inset:0; z-index:1; pointer-events:none; }
 
@@ -127,6 +130,7 @@
 </head>
 <body>
 
+<canvas id="nebula"></canvas>
 <canvas id="stars"></canvas>
 <div id="scene3d"></div>
 
@@ -312,6 +316,51 @@ const debugEl = document.getElementById('debug');
 const loadingEl = document.getElementById('loading');
 const readingEl = document.getElementById('reading');
 const questionInput = document.getElementById('question');
+
+/* ============ 银河背景（极淡银河带） ============ */
+const nebulaCanvas = document.getElementById('nebula');
+const nctx = nebulaCanvas.getContext('2d');
+function drawNebula(){
+  const w = nebulaCanvas.width  = window.innerWidth;
+  const h = nebulaCanvas.height = window.innerHeight;
+  nctx.clearRect(0,0,w,h);
+  nctx.globalCompositeOperation = 'lighter';
+
+  const cx = w*0.5, cy = h*0.45;      // 银河中心（略偏上）
+  const ang = -0.42;                   // 倾角
+  const len = Math.hypot(w,h)*0.9;     // 整条带的长度
+  const cos = Math.cos(ang), sin = Math.sin(ang);
+
+  // 极淡的核球
+  const core = nctx.createRadialGradient(cx,cy,0, cx,cy, len*0.12);
+  core.addColorStop(0, 'rgba(226,216,236,0.10)');
+  core.addColorStop(1, 'rgba(226,216,236,0)');
+  nctx.fillStyle = core;
+  nctx.beginPath(); nctx.arc(cx,cy,len*0.12,0,Math.PI*2); nctx.fill();
+
+  // 沿倾斜轴撒淡星点，中心略密、两端渐隐
+  const N = 240;
+  const cols = ['190,200,235','212,204,230','236,222,214'];
+  for (let i=0;i<N;i++){
+    const t = Math.random()*2 - 1;                 // -1..1 沿轴
+    const along = t * len*0.5;
+    const spread = (Math.random()*2-1) * len*(0.015 + 0.045*Math.abs(t));
+    const x = cx + along*cos - spread*sin;
+    const y = cy + along*sin + spread*cos;
+    const dens = Math.max(0, 1 - Math.abs(t));
+    const r = 1 + Math.random()*2.2;
+    const a = (0.03 + 0.09*Math.random()) * dens;
+    const col = cols[(Math.random()*cols.length)|0];
+    const g = nctx.createRadialGradient(x,y,0, x,y,r*3);
+    g.addColorStop(0, `rgba(${col},${a})`);
+    g.addColorStop(1, `rgba(${col},0)`);
+    nctx.fillStyle = g;
+    nctx.beginPath(); nctx.arc(x,y,r*3,0,Math.PI*2); nctx.fill();
+  }
+
+  nctx.globalCompositeOperation = 'source-over';
+}
+drawNebula();
 
 /* ============ 星空背景 ============ */
 const starCanvas = document.getElementById('stars');
@@ -1353,6 +1402,7 @@ window.addEventListener('resize', ()=>{
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
   fitScene();
+  drawNebula();
   initStars();
 });
 
