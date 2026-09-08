@@ -1,0 +1,12 @@
+{
+  "name": "tarot-phone",
+  "version": "1.0.0",
+  "private": true,
+  "description": "塔罗牌手势占卜 + DeepSeek 解牌（页面 + 代理一体）",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
