@@ -194,10 +194,22 @@ const FAN_TURN  = 1.0;    // 朝内旋转系数
 
 const IMG_BASE = 'https://cdn.jsdelivr.net/gh/nishshoko/astra-cards@main/';
 
-/* ============ 大模型解牌（DeepSeek 代理） ============ */
-const LLM_ENDPOINT = '/api/read';   // 代理地址（同源部署保持相对路径；代理在别处时填完整 https 地址）
+/* ============ 大模型解牌（DeepSeek 直连） ============ */
 const LLM_ENABLED  = true;          // 改为 false 则完全走本地静态解读
+const LLM_API_URL  = 'https://api.deepseek.com/chat/completions';
+const LLM_API_KEY  = 'sk-afda60d72f9f4aea8a501878204f2b57';   // ⚠️ 直连模式下此 key 会暴露在源码里，用完可去 DeepSeek 后台重置
+const LLM_MODEL    = 'deepseek-v4-flash';   // 或 deepseek-v4-pro
 let   userQuestion = '';            // 用户选牌前输入的问题
+
+function buildPrompt(question, picked){
+  const q = (question || '').trim();
+  const lines = picked.map(c => `${c.pos}：${c.zh}（${c.en}）—— ${c.meaning}`);
+  return '用户的问题：' + (q || '未说明') + '\n'
+    + '抽到的三张牌（过去 · 现在 · 未来）：\n' + lines.join('\n') + '\n'
+    + '请以资深塔罗师的身份，结合用户的问题，对这三张牌做整体解读：'
+    + '点出牌与问题的关联、牌与牌之间的呼应，并给出一条温和的行动建议。'
+    + '使用简体中文，控制在 200 字以内。';
+}
 
 /* ============ 78 张牌数据 ============ */
 /* 大阿卡纳 22 张 */
@@ -1022,22 +1034,31 @@ function escapeHtml(s){
 }
 
 async function askLLM(question, picked){
-  const res = await fetch(LLM_ENDPOINT, {
+  const res = await fetch(LLM_API_URL, {
     method:'POST',
-    headers:{ 'Content-Type':'application/json' },
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer ' + LLM_API_KEY
+    },
     body: JSON.stringify({
-      question: question,
-      cards: picked.map(c => ({ pos:c.pos, zh:c.zh, en:c.en, meaning:c.meaning }))
+      model: LLM_MODEL,
+      messages: [
+        { role:'system', content:'你是一位温柔、有洞察力的塔罗解读师。' },
+        { role:'user',   content: buildPrompt(question, picked) }
+      ],
+      temperature: 0.9,
+      stream: false
     })
   });
   if (!res.ok){
     let msg = 'HTTP ' + res.status;
-    try{ const j = await res.json(); if (j && j.error) msg += ': ' + j.error; }catch(e){}
+    try{ const j = await res.json(); if (j && j.error && j.error.message) msg += ': ' + j.error.message; }catch(e){}
     throw new Error(msg);
   }
   const data = await res.json();
-  if (!data || !data.content) throw new Error('empty response');
-  return data.content;
+  const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (!content) throw new Error('empty response');
+  return content;
 }
 
 async function showReading(){
