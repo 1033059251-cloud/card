@@ -70,6 +70,9 @@
   #reading .r-name{ font-size:20px; color:#f6d190; margin:3px 0 6px; font-weight:700; }
   #reading .r-name span{ font-size:13px; color:#a08cc9; font-weight:400; margin-left:8px; letter-spacing:1px; }
   #reading .r-meaning{ font-size:14px; line-height:1.65; color:#e7dcf0; }
+  #reading .r-orient{ display:inline-block; font-size:10px; letter-spacing:1px; padding:1px 7px; border-radius:20px;
+    margin-left:8px; color:#9fe6b8; border:1px solid rgba(120,220,160,.4); background:rgba(40,120,80,.14); }
+  #reading .r-orient.rev{ color:#f0a8a8; border-color:rgba(230,130,130,.45); background:rgba(150,50,60,.16); }
   #reading .r-summary{ margin-top:16px; padding:13px 14px; border:1px solid rgba(232,200,130,.25);
     border-radius:12px; font-size:13px; line-height:1.75; color:#dccbe8; background:rgba(120,80,200,.08); }
   #reading .r-close{ display:block; margin:18px auto 0; font-family:inherit; letter-spacing:4px; cursor:pointer;
@@ -203,11 +206,12 @@ let   userQuestion = '';            // 用户选牌前输入的问题
 
 function buildPrompt(question, picked){
   const q = (question || '').trim();
-  const lines = picked.map(c => `${c.pos}：${c.zh}（${c.en}）—— ${c.meaning}`);
+  const lines = picked.map(c => `${c.pos}：${c.zh}（${c.en}）【${c.reversed ? '逆位' : '正位'}】—— ${c.meaning}`);
   return '用户的问题：' + (q || '未说明') + '\n'
     + '抽到的三张牌（过去 · 现在 · 未来）：\n' + lines.join('\n') + '\n'
     + '请以资深塔罗师的身份，结合用户的问题，对这三张牌做整体解读：'
     + '点出牌与问题的关联、牌与牌之间的呼应，并给出一条温和的行动建议。'
+    + '注意：标了【逆位】的牌要按逆位含义解读（能量受阻、内化、需反思或延迟），不要按正位解读。'
     + '使用简体中文，控制在 200 字以内。';
 }
 
@@ -682,7 +686,7 @@ for (let i = 0; i < deck.length; i++) {
   const outer = new THREE.Group();
   outer.add(flipGroup);
   scene.add(outer);
-  cards.push({ outer, flipGroup, mBack, mFront, slotIndex:-1, targetRotY:0, rotY:0, arrived:false });
+  cards.push({ outer, flipGroup, front:frontMesh, mBack, mFront, slotIndex:-1, targetRotY:0, rotY:0, arrived:false, reversed:false });
 }
 
 /* —— 顶部三个格子（空框） —— */
@@ -979,6 +983,8 @@ function tryPick(){
   if (t < 0) return;
   cards[t].slotIndex = ui.pickedCount;
   cards[t].arrived = false;
+  cards[t].reversed = Math.random() < 0.5;          // 随机正位 / 逆位
+  cards[t].front.rotation.z = cards[t].reversed ? Math.PI : 0;
   ui.pickedCount++;
   ui.lastPick = now;
   sfxPick();
@@ -1006,7 +1012,8 @@ function pickedCards(){
     const c = cards.find(x => x.slotIndex === k);
     if (!c) continue;
     const d = deck[cards.indexOf(c)];
-    list.push({ zh:d.zh, en:d.en, meaning:d.meaning, pos:READING_POS[k].zh, posEn:READING_POS[k].en });
+    list.push({ zh:d.zh, en:d.en, meaning:d.meaning, pos:READING_POS[k].zh, posEn:READING_POS[k].en,
+      reversed: !!c.reversed, orient: c.reversed ? '逆位' : '正位' });
   }
   return list;
 }
@@ -1014,7 +1021,8 @@ function pickedCards(){
 function buildReadingRows(){
   return pickedCards().map(c =>
     '<div class="r-card">' +
-      '<div class="r-pos">' + c.pos + ' · ' + c.posEn + '</div>' +
+      '<div class="r-pos">' + c.pos + ' · ' + c.posEn +
+        '<span class="r-orient' + (c.reversed ? ' rev' : '') + '">' + c.orient + '</span></div>' +
       '<div class="r-name">' + c.zh + '<span>' + c.en + '</span></div>' +
       '<div class="r-meaning">' + c.meaning + '</div>' +
     '</div>'
@@ -1024,9 +1032,11 @@ function buildReadingRows(){
 function localSummary(){
   const list = pickedCards();
   if (list.length < 3) return '';
-  return '这三张牌勾勒出一条时间线：从「' + list[0].zh + '」所代表的过去，'
-    + '走到「' + list[1].zh + '」的当下，再流向「' + list[2].zh + '」的未来。'
-    + '它们彼此呼应，提示你顺应这股能量的流动，稳步前行。';
+  const revNote = list.some(c => c.reversed)
+    ? '其中逆位的牌提示能量受阻或需向内反思，宜放缓脚步。' : '';
+  return '这三张牌勾勒出一条时间线：从' + list[0].orient + '的「' + list[0].zh + '」所代表的过去，'
+    + '走到' + list[1].orient + '的「' + list[1].zh + '」的当下，再流向' + list[2].orient + '的「' + list[2].zh + '」的未来。'
+    + '它们彼此呼应，提示你顺应这股能量的流动，稳步前行。' + revNote;
 }
 
 function escapeHtml(s){
@@ -1106,7 +1116,7 @@ function rebuildFronts(){
 function resetAll(){
   shuffle(deck);                       // 重新洗牌
   rebuildFronts();                     // 按新顺序重建正面牌面
-  for (const c of cards){ c.slotIndex=-1; c.targetRotY=0; c.outer.visible=true; c.arrived=false; }
+  for (const c of cards){ c.slotIndex=-1; c.targetRotY=0; c.outer.visible=true; c.arrived=false; c.reversed=false; c.front.rotation.z=0; }
   for (const f of fx){ f.active=false; f.points.visible=false; f.card=null; }
   ui.pickedCount=0; ui.revealed=false; ui.revealAt=0; ui.lastPick=0;
   ui.readingAt=0; ui.readingShown=false;
