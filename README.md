@@ -2,19 +2,21 @@
 
 基于 **HTML + JavaScript + MediaPipe Hands** 的本地塔罗牌手势交互网页。摄像头画面在浏览器内本地处理，**不上传、不存储任何影像**。
 
-## 三个原型
+## 主要文件
 
-| 文件 | 交互模型 | 用途 |
-| --- | --- | --- |
-| [index.html](index.html) | 基础版：横向牌阵 + 惯性滚动选牌 + 悬停翻牌 | 快速落地 |
-| [ritual.html](ritual.html) | 五步仪式版：环形牌阵 + 画圈洗牌 + 单指选牌 + 转腕翻牌 + 握拳抓取 + 置区解读 | TouchDesigner 版的交互逻辑参照 |
-| [lite.html](lite.html) | 网页精简版（Three.js）：张开手掌洗牌 + 握拳选牌，选中的牌飞入顶部三格，三张选完自动开牌 | Three.js + 高清纹理 |
+| 文件 | 说明 |
+| --- | --- |
+| [card_phone.html](card_phone.html) | **手机主版本**：Three.js + 手势（洗牌/选牌）+ DeepSeek 解牌，支持开牌前输入问题。线上：<https://1033059251-cloud.github.io/card/> |
+| [index.html](index.html) | 跳转页：自动跳到 `card_phone.html`（给 GitHub Pages 根路径用） |
+| [index_base.html](index_base.html) | 基础版原型：横向牌阵 + 惯性滚动选牌 + 悬停翻牌 |
+| [ritual.html](ritual.html) | 五步仪式版原型：环形牌阵 + 画圈洗牌 + 单指选牌 + 转腕翻牌 + 握拳抓取 + 置区解读 |
+| [lite.html](lite.html) | 网页精简版原型（Three.js）：张开手掌洗牌 + 握拳选牌，选中的牌飞入顶部三格 |
 
-> `ritual.html` 的启动方式与 `index.html` 相同（见下）。
+> 各原型本地启动方式见下（`python3 -m http.server`）。
 
 ## 运行
 
-摄像头调用（`getUserMedia`）需要 **安全上下文**（https 或 localhost），因此不能直接双击 `index.html`（`file://` 会被浏览器拦截）。任选其一：
+摄像头调用（`getUserMedia`）需要 **安全上下文**（https 或 localhost），因此不能直接双击 `.html` 文件（`file://` 会被浏览器拦截）。任选其一：
 
 ```bash
 # 方式一：Python（macOS 自带）
@@ -39,7 +41,7 @@ npx serve .
 | 🤏 捏合后上抬 | 捏合并向上抬掌 | 卡牌脱离牌阵，随指尖移动，**松手消失** |
 | ✊ 握拳 | 对准某张牌握拳 | 定契（金色锁定） |
 
-## 可调参数（`index.html` 顶部 `/* 常量 */`）
+## 可调参数（`index_base.html` 顶部 `/* 常量 */`）
 
 | 常量 | 默认 | 说明 |
 | --- | --- | --- |
@@ -52,23 +54,20 @@ npx serve .
 | `FRICTION` | 0.97 | 惯性摩擦（越接近 1 惯性越大、滑动越重越顺） |
 | `modelComplexity` | 1 | 模型精度（低端机器可改 `0` 更流畅） |
 
-## 问题输入 + 大模型解牌（DeepSeek）
+## 问题输入 + AI 解牌（DeepSeek）
 
-`card_phone.html` 支持在开牌前输入问题、解牌时调用 DeepSeek 生成个性化解读，需要配合一个极简代理 `server.js`：
+`card_phone.html` 支持开牌前输入问题、解牌时**前端直连 DeepSeek** 生成个性化解读。纯静态页面，无后端。
 
-```bash
-DEEPSEEK_API_KEY=sk-你的key node server.js
-```
+- 配置在 `card_phone.html` 顶部：`LLM_API_KEY`（你的 key）、`LLM_MODEL`（默认 `deepseek-v4-flash`，可改 `deepseek-v4-pro`）。
+- ⚠️ 直连模式下 **API Key 会暴露在网页源码里**（自用 / 小范围分享可接受）。额度异常时去 DeepSeek 后台重置，再把新 key 换到 `LLM_API_KEY`。
+- 调用失败（网络 / 额度 / 未配 key）会自动退回内置的静态解读，并显示「本地解读」标签。
 
-然后打开 **http://localhost:3000**（Mac 本机摄像头可用）。手机访问需要 https，可用隧道把本地端口暴露出去，例如：
+### 部署（免费 GitHub Pages）
 
-```bash
-npx localtunnel --port 3000
-```
+1. 推送到 GitHub 仓库，开启 **Settings → Pages**（Source：`main` 分支 `/ (root)`）。
+2. 访问 `https://<用户名>.github.io/<仓库名>/`，`index.html` 会自动跳转到 `card_phone.html`。
 
-- 代理只做两件事：托管页面 + 把 `POST /api/read` 转发给 DeepSeek，**API Key 只存在服务端**，不暴露在前端。
-- 未配置 Key、或请求失败时，`card_phone.html` 会自动退回内置的静态解读。
-- 想改模型 / 提示词：编辑 `server.js` 里的 `MODEL` 与 `buildPrompt()`。
+本地调试：`python3 -m http.server 8000` 后打开 `http://localhost:8000/card_phone.html`。
 
 ## 说明
 
