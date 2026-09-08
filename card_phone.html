@@ -16,23 +16,13 @@
   html,body{ width:100%; height:100%; overflow:hidden; }
   body{
     background:
-      /* 银河带：对角线柔和亮带 */
-      linear-gradient(115deg,
-        rgba(0,0,0,0) 0%,
-        rgba(80,100,170,.05) 26%,
-        rgba(150,170,220,.10) 40%,
-        rgba(210,220,255,.16) 50%,
-        rgba(150,170,220,.10) 60%,
-        rgba(80,100,170,.05) 74%,
-        rgba(0,0,0,0) 88%),
-      /* 银心：更亮的核心 */
-      radial-gradient(42% 24% at 62% 38%, rgba(205,215,255,.16) 0%, rgba(150,160,210,.06) 55%, transparent 75%),
       radial-gradient(90% 70% at 72% 12%, rgba(38,28,86,.08) 0%, transparent 60%),
       radial-gradient(85% 65% at 22% 26%, rgba(14,32,68,.06) 0%, transparent 55%),
       radial-gradient(75% 60% at 50% 68%, rgba(44,18,54,.05) 0%, transparent 54%),
       radial-gradient(140% 100% at 50% 0%, #000000 0%, #000000 60%, #000000 100%);
     color:#eee; font-family:"Cinzel","Songti SC","STSong",serif;
     user-select:none; -webkit-user-select:none;
+    touch-action:none;
   }
 
   /* 星空层（2D canvas：闪烁星星 + 流星） */
@@ -132,6 +122,7 @@
     border-top-color:var(--gold-hi); border-radius:50%; animation:spin 1s linear infinite; }
   @keyframes spin{ to{ transform:rotate(360deg); } }
   #loading .txt{ font-size:13px; letter-spacing:3px; color:#cdbdf0; }
+
 </style>
 </head>
 <body>
@@ -437,6 +428,19 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth/window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 6);
 camera.lookAt(0, 0, 0);
+
+/* 自适应横竖屏：按可见范围缩放相机距离，让牌阵与顶部格子始终容纳在屏幕内 */
+const CAM_DIST = 6;                 // 基准相机距离
+const FIT_W = 1.7, FIT_H = 2.5;     // 需容纳的世界空间半宽 / 半高（含格子与中心牌）
+function fitScene(){
+  const aspect = window.innerWidth / window.innerHeight;
+  const tanH = 0.4142;              // tan(45°/2)
+  const halfH = tanH * CAM_DIST;    // 基准距离下的可见半高
+  const halfW = halfH * aspect;
+  const s = Math.min(1, halfW/FIT_W, halfH/FIT_H);
+  camera.position.z = CAM_DIST / s;
+}
+fitScene();
 
 /* —— 牌背纹理（程序化，维特风格） —— */
 let backCanvas = null, backData = null;
@@ -962,6 +966,7 @@ function onResults(results){
   if (!loaded){ loaded = true; loadingEl.classList.remove('show'); }
   const handsArr = results.multiHandLandmarks || [];
   if (!handsArr.length){ ui.handPresent = false; ui.gesture = 'none'; ui.fistStart = null; ui.fistArmed = true; return; }
+  if (touchActive){ ui.gesture = 'none'; ui.fistStart = null; return; }   // 触摸中，让触摸接管
   ui.handPresent = true;
 
   let openX = null, fistHand = false;
@@ -1347,8 +1352,39 @@ window.addEventListener('resize', ()=>{
   camera.aspect = window.innerWidth/window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  fitScene();
   initStars();
 });
+
+/* ============ 触摸操作：滑动洗牌 + 点按选牌（与手势并存，触摸期间手势让位） ============ */
+let touchActive = false, touchStartX = 0, touchStartY = 0, touchMoved = false, touchSelect0 = CENTER_INDEX;
+function touchIgnored(t){
+  return !!(t && t.closest && t.closest('button,#reading,#overlay'));
+}
+document.addEventListener('touchstart', (e)=>{
+  if (!ui.running || ui.revealed || ui.pickedCount >= 3) return;
+  if (touchIgnored(e.target)) return;
+  const t = e.touches[0];
+  touchActive = true; touchMoved = false;
+  touchStartX = t.clientX; touchStartY = t.clientY;
+  touchSelect0 = ui.selectIndex;
+}, { passive:true });
+document.addEventListener('touchmove', (e)=>{
+  if (!touchActive) return;
+  const t = e.touches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  if (!touchMoved && Math.hypot(dx,dy) > 10) touchMoved = true;
+  if (touchMoved){
+    const norm = clamp(dx / (innerWidth*0.5), -1, 1);
+    ui.selectIndex = touchSelect0 - norm * (MAX_INDEX - CENTER_INDEX);
+  }
+}, { passive:true });
+document.addEventListener('touchend', (e)=>{
+  if (!touchActive) return;
+  touchActive = false;
+  if (!touchMoved) tryPick();          // 轻点 = 选中间那张牌
+}, { passive:true });
 </script>
 </body>
 </html>
