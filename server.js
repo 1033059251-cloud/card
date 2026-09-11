@@ -8,12 +8,47 @@ const http  = require('http');
 const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
+const zlib  = require('zlib');
 
 const PORT  = process.env.PORT || 3000;
 const KEY   = process.env.DEEPSEEK_API_KEY || '';
 const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-v4-flash';
 
 const HTML = fs.readFileSync(path.join(__dirname, 'card_phone.html'));
+
+/* —— 预压缩 HTML，命中 Accept-Encoding 时直接返回，省去逐次压缩 —— */
+const HTML_GZIP   = zlib.gzipSync(HTML);
+const HTML_BROTLI = zlib.brotliCompressSync(HTML);
+
+/* —— 静态资源（牌面 atlas + 全息纹理）—— */
+const STATIC_TYPES = {
+  '.webp': 'image/webp',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.js':   'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8'
+};
+
+function serveStatic(req, res, urlPath){
+  const rel = decodeURIComponent(urlPath.replace(/^\/+/, ''));
+  const file = path.join(__dirname, rel);
+  if (!file.startsWith(__dirname)) return false;   // 防目录穿越
+  let stat;
+  try { stat = fs.statSync(file); } catch(e){ return false; }
+  if (!stat.isFile()) return false;
+  const ext = path.extname(file).toLowerCase();
+  const type = STATIC_TYPES[ext] || 'application/octet-stream';
+  const cache = (ext === '.webp' || ext === '.png' || ext === '.jpg')
+    ? 'public, max-age=31536000, immutable'   // 图片文件名固定，可长期缓存
+    : 'no-cache';
+  res.writeHead(200, {
+    'Content-Type': type,
+    'Content-Length': stat.size,
+    'Cache-Control': cache
+  });
+  fs.createReadStream(file).pipe(res);
+  return true;
+}
 
 function buildPrompt(b){
   const q = (b.question || '').trim();
@@ -90,10 +125,28 @@ const server = http.createServer((req,res)=>{
     return;
   }
 
-  if (req.method === 'GET' && (req.url === '/' || req.url === '/card_phone.html' || req.url === '/index.html')){
-    res.writeHead(200, {'Content-Type':'text/html; charset=utf-8'});
-    res.end(HTML);
-    return;
+  if (req.method === 'GET'){
+    const urlPath = (req.url || '/').split('?')[0];
+
+    // 静态资源：assets/ 与 textures/ 下的牌面 atlas、全息纹理等
+    if (urlPath.startsWith('/assets/') || urlPath.startsWith('/textures/')){
+      if (serveStatic(req, res, urlPath)) return;
+    }
+
+    if (urlPath === '/' || urlPath === '/card_phone.html' || urlPath === '/index.html'){
+      const accept = (req.headers['accept-encoding'] || '').toLowerCase();
+      let body = HTML, enc = '';
+      if (accept.includes('br'))      { body = HTML_BROTLI; enc = 'br'; }
+      else if (accept.includes('gzip')){ body = HTML_GZIP;   enc = 'gzip'; }
+      const headers = {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache'
+      };
+      if (enc) headers['Content-Encoding'] = enc;
+      res.writeHead(200, headers);
+      res.end(body);
+      return;
+    }
   }
 
   res.writeHead(404, {'Content-Type':'text/plain; charset=utf-8'});

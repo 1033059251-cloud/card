@@ -11,6 +11,8 @@
 | [index_base.html](index_base.html) | 基础版原型：横向牌阵 + 惯性滚动选牌 + 悬停翻牌 |
 | [ritual.html](ritual.html) | 五步仪式版原型：环形牌阵 + 画圈洗牌 + 单指选牌 + 转腕翻牌 + 握拳抓取 + 置区解读 |
 | [lite.html](lite.html) | 网页精简版原型（Three.js）：张开手掌洗牌 + 握拳选牌，选中的牌飞入顶部三格 |
+| [assets/](assets/) | 78 张牌面合成的 5 张 atlas（精灵图），前端加载后按子矩形切出各牌面 |
+| [textures/](textures/) | 全息材质（pearl/blue-noise/micro-grain）+ 隐藏卡背景/主体纹理 |
 
 > 各原型本地启动方式见下（`python3 -m http.server`）。
 
@@ -29,7 +31,7 @@ npx serve .
 
 然后浏览器打开 **http://localhost:8000**，点击「开启占卜」授权摄像头。
 
-> 首次加载需联网（从 jsdelivr CDN 拉取 MediaPipe 库、WASM、手部关键点模型，以及 Google Fonts）。运行时摄像头帧只在本机处理，不联网上传。
+> 首次加载需联网（从 jsdelivr CDN 拉取 MediaPipe 库、WASM、手部关键点模型，以及 Google Fonts）。牌面图已打包进本地 `assets/`（atlas），无需再逐张请求 CDN。运行时摄像头帧只在本机处理，不联网上传。
 
 ## 手势说明
 
@@ -65,6 +67,7 @@ npx serve .
 ### 部署（免费 GitHub Pages）
 
 1. 推送到 GitHub 仓库，开启 **Settings → Pages**（Source：`main` 分支 `/ (root)`）。
+   > ⚠️ 需连同 `assets/`、`textures/` 一起提交推送（牌面 atlas 与全息纹理已外置到这两个目录），否则卡牌图会缺失。
 2. 访问 `https://<用户名>.github.io/<仓库名>/`，`index.html` 会自动跳转到 `card_phone.html`。
 
 本地调试：`python3 -m http.server 8000` 后打开 `http://localhost:8000/card_phone.html`。
